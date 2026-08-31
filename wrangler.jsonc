@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "site-chat-agent",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/agents/*", "/config", "/admin", "/admin/*", "/api/*", "/feedback"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ChatAgent", "class_name": "ChatAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ChatAgent"] }],
+  "triggers": { "crons": ["0 3 * * *"] },
+  "ai_search": [
+    {
+      "binding": "AI_SEARCH",
+      "instance_name": "company-site"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chat_agent",
+      "database_id": "REPLACE",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "analytics_engine_datasets": [
+    { "binding": "AE", "dataset": "chat_agent_events" }
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "vars": {
+    "AI_SEARCH_INSTANCE": "company-site",
+    "CF_ACCOUNT_ID": "REPLACE",
+    "AI_GATEWAY_ID": "site-chat",
+    "MODEL_MAIN_DEFAULT": "anthropic/claude-sonnet-5",
+    "MODEL_SMALL": "anthropic/claude-haiku-4.5",
+    "TURNSTILE_SITE_KEY": "REPLACE",
+    "NOTIFY_TO": "REPLACE@company.co.nz",
+    "NOTIFY_FROM": "widget@REPLACE-domain.co.nz",
+    "BOOKING_URL": "REPLACE"
+  }
+}

@@ -1,0 +1,15 @@
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+worker-configuration.d.ts
+.env.local
+
+admin/node_modules
+admin/.git
+admin/dist
