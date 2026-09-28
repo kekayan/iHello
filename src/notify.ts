@@ -1,6 +1,7 @@
 export interface HandoffNotifyInput {
   type: "lead" | "support";
   email: string;
+  phone?: string;
   name?: string;
   company?: string;
   pillar?: string;
@@ -22,6 +23,7 @@ function formatBody(input: HandoffNotifyInput): string {
   const lines = [
     `Type: ${input.type}`,
     `Email: ${input.email || "(none)"}`,
+    `Phone: ${input.phone || ""}`,
     `Name: ${input.name || ""}`,
     `Company: ${input.company || ""}`,
     `Pillar: ${input.pillar || ""}`,

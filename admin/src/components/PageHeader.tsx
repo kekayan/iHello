@@ -69,7 +69,7 @@ export function EmptyState({
 
 export function FormError({ message }: { message: string }) {
   return (
-    <div className="rounded-[10px] border border-[var(--rose)] bg-[var(--rose)]/35 px-3.5 py-2.5 text-[13px] font-medium text-[var(--rose-ink)]">
+    <div className="whitespace-pre-wrap rounded-[10px] border border-[var(--rose)] bg-[var(--rose)]/35 px-3.5 py-2.5 text-[13px] font-medium text-[var(--rose-ink)]">
       {message}
     </div>
   );

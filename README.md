@@ -7,9 +7,10 @@ Product name: **iHello**. Worker/DB identifiers stay as specified (`site-chat-ag
 ## Stack
 
 - Cloudflare Workers + Durable Objects via Agents SDK
-- Custom refine → retrieve → generate → validate harness (not Project Think)
+- `AIChatAgent` harness (`@cloudflare/ai-chat`) on a Durable Object, driving `streamText` with refine / groundedness validation around the agentic loop
 - Cloudflare AI Search instance `company-site`
-- Anthropic via AI Gateway (`claude-sonnet-5` / `claude-haiku-4-5-20251001`)
+- xAI / Anthropic / OpenAI / Workers AI via Cloudflare AI Gateway (default: `xai/grok-4.20-0309-non-reasoning` for low latency; Grok 4.6, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, and others in Settings), Unified Billing credits
+
 - D1 `chat_agent`, Analytics Engine `chat_agent_events`
 - Turnstile (free tier) + Workers rate limiting
 - Slack incoming webhook notifications (extendable channel interface for email/WhatsApp later)
@@ -46,37 +47,42 @@ cd admin && npx shadcn@latest add <component>
 
 ## Secrets
 
+Chat models use the **AI binding** (`env.AI.run` → AI Gateway Unified Billing). No provider API keys and no `CF_API_TOKEN` for chat.
+
 ```bash
-npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put TURNSTILE_SECRET
 npx wrangler secret put SLACK_WEBHOOK_URL
+# Optional — Knowledge admin REST only:
 npx wrangler secret put CF_API_TOKEN
 ```
 
-Locally, put the same keys in `.dev.vars`.
-
-If your AI Gateway requires Cloudflare authentication, also send `cf-aig-authorization: Bearer <token>` (document the token source in your ops runbook). The code uses `x-api-key` for Anthropic as specified.
+Locally, put the same keys in `.dev.vars`. Ensure gateway `AI_GATEWAY_ID` (`default`) exists and has Unified Billing / credits enabled.
 
 ## Wrangler vars to replace
 
 In `wrangler.jsonc`: `database_id`, `CF_ACCOUNT_ID`, `TURNSTILE_SITE_KEY`, `NOTIFY_TO`, `NOTIFY_FROM`, `BOOKING_URL`.
 
-## Cloudflare setup checklist
+## Admin auth (Cloudflare Access)
 
-1. Create D1 database `chat_agent` and apply migrations.
-2. Create AI Search instance `company-site` and index site content / upload docs via admin Knowledge.
-3. Create AI Gateway `site-chat` with Anthropic provider.
-4. **Manual:** configure an AI Gateway budget alert for spend control (required by guardrail checklist L5).
-5. Optional: enable AI Gateway Guardrails on the refine (non-streamed) path only — never on streamed generate.
-6. Create Turnstile invisible widget (free tier) and set site key + secret.
-7. Create Slack incoming webhook; set `SLACK_WEBHOOK_URL`.
-8. Put Cloudflare Access in front of `/admin*` and `/api/*`. The Worker only checks for `Cf-Access-Jwt-Assertion`.
-9. Deploy: `npm run deploy`.
+Protect only admin paths — leave the public widget open. **Do not** use “Protect this Worker” (locks chat + breaks WebSockets).
+
+1. Zero Trust → **Access controls** → **Applications** → **Create new application**
+2. Choose **Self-hosted and private** → **Add public hostname**
+3. Paths on `hello.kekayan.com`: `admin`, `admin/*`, `api/*`
+4. Policy: Allow your email (OTP and/or Google)
+5. Copy **AUD** + team domain (`https://<team>.cloudflareaccess.com`):
+   ```bash
+   npx wrangler secret put CF_ACCESS_AUD
+   ```
+   In `wrangler.jsonc` vars: `"CF_ACCESS_TEAM_DOMAIN": "https://<team>.cloudflareaccess.com"`
+6. `npx wrangler deploy`
+
+The Worker verifies `Cf-Access-Jwt-Assertion` when those are set. Local `wrangler dev` skips Access until configured.
 
 ## Tests
 
-With `wrangler dev` running, local D1 migrated, and live credentials configured
-(`ANTHROPIC_API_KEY`, AI Search instance, AI Gateway):
+With `wrangler dev` running, local D1 migrated, and AI Gateway credits configured
+(Unified Billing on gateway `default`):
 
 ```bash
 npm run test:personas

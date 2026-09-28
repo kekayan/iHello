@@ -13,3 +13,5 @@ worker-configuration.d.ts
 admin/node_modules
 admin/.git
 admin/dist
+
+.cursor/skills/verify-ihello/evidence/

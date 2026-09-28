@@ -2,8 +2,15 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "site-chat-agent",
   "main": "src/server.ts",
-  "compatibility_date": "2026-08-01",
+  "compatibility_date": "2026-08-28",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "hello.kekayan.com",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -14,17 +21,27 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ChatAgent"] }],
   "triggers": { "crons": ["0 3 * * *"] },
-  "ai_search": [
+  "ai": {
+    "binding": "AI"
+  },
+  // Unused in product path (Vectorize-only knowledge). Kept so dashboard binding stays intact.
+  "ai_search_namespaces": [
     {
       "binding": "AI_SEARCH",
-      "instance_name": "company-site"
+      "namespace": "default"
+    }
+  ],
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "chat-agent-chunks"
     }
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "chat_agent",
-      "database_id": "REPLACE",
+      "database_id": "44b49c27-9f35-4bbe-9fec-b47281595250",
       "migrations_dir": "./migrations"
     }
   ],
@@ -38,12 +55,19 @@
       "simple": { "limit": 20, "period": 60 }
     }
   ],
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  },
   "vars": {
     "AI_SEARCH_INSTANCE": "company-site",
-    "CF_ACCOUNT_ID": "REPLACE",
-    "AI_GATEWAY_ID": "site-chat",
-    "MODEL_MAIN_DEFAULT": "anthropic/claude-sonnet-5",
-    "MODEL_SMALL": "anthropic/claude-haiku-4.5",
+    "CF_ACCOUNT_ID": "53d2fe8f27280c1b8d4aa769031dc667",
+    "AI_GATEWAY_ID": "default",
+    "MODEL_MAIN_DEFAULT": "openai/gpt-5.6-luna",
+    "MODEL_SMALL": "openai/gpt-5.6-luna",
     "TURNSTILE_SITE_KEY": "REPLACE",
     "NOTIFY_TO": "REPLACE@company.co.nz",
     "NOTIFY_FROM": "widget@REPLACE-domain.co.nz",

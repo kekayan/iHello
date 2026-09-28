@@ -1,4 +1,5 @@
 import { routeAgentRequest } from "agents";
+import { requireAccess } from "./access";
 import { handleAdminApi, handlePublicFeedback } from "./admin-api";
 import { ChatAgent } from "./chat-agent";
 import { loadSettings, resolveVariant } from "./settings";
@@ -62,6 +63,7 @@ async function handleConfig(request: Request, env: Env): Promise<Response> {
         escalation: "",
       },
       modelMain: "",
+      reasoningEffort: "low",
       retentionDays: 90,
       maxMessages: 40,
       maxCharsPerMessage: 2000,
@@ -122,14 +124,20 @@ export default {
     }
 
     if (url.pathname === "/admin.html") {
+      const unauth = await requireAccess(request, env);
+      if (unauth) return unauth;
       return Response.redirect(`${url.origin}/admin/`, 302);
     }
 
     if (url.pathname === "/admin" || url.pathname === "/admin/") {
+      const unauth = await requireAccess(request, env);
+      if (unauth) return unauth;
       return serveAdminSpa(env, url.origin);
     }
 
     if (url.pathname.startsWith("/admin/")) {
+      const unauth = await requireAccess(request, env);
+      if (unauth) return unauth;
       // Client-side router paths → SPA shell; hashed assets served from ASSETS.
       const asset = await env.ASSETS.fetch(new Request(url.toString(), request));
       if (asset.status !== 404) return asset;

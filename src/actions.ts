@@ -89,6 +89,7 @@ export const BUILTIN_ACTIONS: ActionPublic[] = [
       properties: {
         type: { type: "string", enum: ["lead", "support"] },
         email: { type: "string" },
+        phone: { type: "string" },
         summary: { type: "string" },
       },
       required: ["type", "summary"],
@@ -239,7 +240,40 @@ export async function listActionRows(db: D1Database): Promise<ActionRow[]> {
 
 export async function listRegistry(db: D1Database): Promise<ActionPublic[]> {
   const rows = await listActionRows(db);
-  return [...BUILTIN_ACTIONS, ...rows.map(rowToPublic)];
+  const overrideByName = new Map(rows.map((r) => [r.name, r]));
+  const builtins = BUILTIN_ACTIONS.map((b) => {
+    const override = overrideByName.get(b.name);
+    if (!override) return b;
+    return {
+      ...b,
+      enabled: override.enabled === 1,
+      updatedAt: override.updated_at,
+    };
+  });
+  const custom = rows
+    .filter((r) => !isReservedActionName(r.name))
+    .map(rowToPublic);
+  return [...builtins, ...custom];
+}
+
+/** Enabled flags for built-in tools (default true; D1 overrides win). */
+export async function loadBuiltinEnabled(
+  db: D1Database,
+): Promise<Record<string, boolean>> {
+  const enabled: Record<string, boolean> = {};
+  for (const b of BUILTIN_ACTIONS) enabled[b.name] = true;
+  if (BUILTIN_ACTIONS.length === 0) return enabled;
+  const placeholders = BUILTIN_ACTIONS.map(() => "?").join(", ");
+  const res = await db
+    .prepare(
+      `SELECT name, enabled FROM actions WHERE name IN (${placeholders})`,
+    )
+    .bind(...BUILTIN_ACTIONS.map((b) => b.name))
+    .all<{ name: string; enabled: number }>();
+  for (const row of res.results ?? []) {
+    enabled[row.name] = row.enabled === 1;
+  }
+  return enabled;
 }
 
 export async function getAction(
@@ -316,14 +350,40 @@ export async function setActionEnabled(
   name: string,
   enabled: boolean,
 ): Promise<ActionPublic> {
+  const now = Date.now();
+
   if (isReservedActionName(name)) {
-    throw new Error("Built-ins stay enabled.");
+    const builtin = BUILTIN_ACTIONS.find((b) => b.name === name);
+    if (!builtin) throw new Error("Action not found");
+    await db
+      .prepare(
+        `INSERT INTO actions
+           (name, description, input_schema, kind, config, secret_ref,
+            confirm_required, enabled, use_count, updated_at)
+         VALUES (?, ?, ?, 'builtin', '{}', NULL, 0, ?, 0, ?)
+         ON CONFLICT(name) DO UPDATE SET
+           enabled = excluded.enabled,
+           updated_at = excluded.updated_at,
+           description = excluded.description,
+           input_schema = excluded.input_schema,
+           kind = 'builtin'`,
+      )
+      .bind(
+        name,
+        builtin.description,
+        JSON.stringify(builtin.inputSchema),
+        enabled ? 1 : 0,
+        now,
+      )
+      .run();
+    return { ...builtin, enabled, updatedAt: now };
   }
+
   const row = await getAction(db, name);
   if (!row) throw new Error("Action not found");
   await db
     .prepare(`UPDATE actions SET enabled = ?, updated_at = ? WHERE name = ?`)
-    .bind(enabled ? 1 : 0, Date.now(), name)
+    .bind(enabled ? 1 : 0, now, name)
     .run();
   const next = await getAction(db, name);
   if (!next) throw new Error("Action not found");

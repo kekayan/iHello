@@ -67,6 +67,7 @@ function HandoffsPage() {
               <TableRow>
                 <TableHead>Type</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Pillar</TableHead>
                 <TableHead>Timeline</TableHead>
                 <TableHead>Scale</TableHead>
@@ -79,6 +80,7 @@ function HandoffsPage() {
                 <TableRow key={h.id}>
                   <TableCell>{h.type}</TableCell>
                   <TableCell>{h.email || ""}</TableCell>
+                  <TableCell>{h.phone || ""}</TableCell>
                   <TableCell>{h.pillar || ""}</TableCell>
                   <TableCell>{h.timeline || ""}</TableCell>
                   <TableCell>{h.scale || ""}</TableCell>

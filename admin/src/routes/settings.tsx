@@ -20,13 +20,13 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const GROUP_ORDER: ModelOption["group"][] = ["OpenAI", "Anthropic", "Workers AI"];
+const GROUP_ORDER: ModelOption["group"][] = ["xAI", "OpenAI", "Anthropic", "Workers AI"];
 
 function SettingsPage() {
   const { toast } = useToast();
   const [s, setS] = useState<Settings | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [modelDefault, setModelDefault] = useState("anthropic/claude-sonnet-5");
+  const [modelDefault, setModelDefault] = useState("xai/grok-4.20-0309-non-reasoning");
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -109,6 +109,31 @@ function SettingsPage() {
             </Select>
             <p className="text-[12px] text-[var(--ink-3)]">{selectedBlurb}</p>
           </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Reasoning effort</Label>
+            <Select
+              value={s.reasoningEffort || "low"}
+              onValueChange={(v) => {
+                if (v === "low" || v === "medium" || v === "high") {
+                  setS({ ...s, reasoningEffort: v });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full max-w-xl">
+                <SelectValue placeholder="Low" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low (faster first token)</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High (deeper thinking)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[12px] text-[var(--ink-3)]">
+              Grok 4.6 always reasons; choose low, medium, or high. Reply{" "}
+              <code className="text-[11px]">content</code> streams;{" "}
+              <code className="text-[11px]">reasoning_content</code> does not.
+            </p>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="retentionDays">Retention days</Label>
             <Input
@@ -169,6 +194,7 @@ function SettingsPage() {
                 method: "PUT",
                 body: JSON.stringify({
                   modelMain: s.modelMain,
+                  reasoningEffort: s.reasoningEffort,
                   retentionDays: s.retentionDays,
                   maxMessages: s.maxMessages,
                   autoOpenSeconds: s.autoOpenSeconds,

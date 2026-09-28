@@ -36,7 +36,7 @@ export function ts(n: number | undefined | null): string {
 export type ModelOption = {
   id: string;
   label: string;
-  group: "OpenAI" | "Anthropic" | "Workers AI";
+  group: "xAI" | "OpenAI" | "Anthropic" | "Workers AI";
   api: "messages" | "chat" | "responses";
   blurb: string;
 };
@@ -58,8 +58,12 @@ export type Settings = {
     answering: string;
     lead: string;
     escalation: string;
+    tool_policy: string;
+    uncertainty: string;
+    examples: string;
   };
   modelMain: string;
+  reasoningEffort: "low" | "medium" | "high";
   retentionDays: number;
   maxMessages: number;
   maxCharsPerMessage: number;
@@ -93,12 +97,75 @@ export type Message = {
   retrieval_score: number | null;
   grounded_score: number | null;
   grounded_commit: number | null;
+  trace_json?: string | null;
 };
+
+export type TraceToolSpan = {
+  name: string;
+  ms: number;
+  ok: boolean;
+  detail?: string;
+};
+
+export type TraceGenerateSpan = {
+  pass: number;
+  duration_ms: number;
+  ttft_ms: number;
+  tool_names: string[];
+};
+
+export type TurnTrace = {
+  model: string;
+  intent: string;
+  reasoning_effort: string;
+  page_url: string;
+  refine_ms: number;
+  retrieve_ms: number;
+  generate: TraceGenerateSpan[];
+  tools: TraceToolSpan[];
+  validate_ms: number;
+  ttft_ms: number;
+  total_ms: number;
+  bottleneck: string;
+};
+
+export type TraceRow = {
+  id: number;
+  conversation_id: string;
+  content: string;
+  created_at: number;
+  grounded_score: number | null;
+  grounded_commit: number | null;
+  trace_json: string;
+  page_url: string | null;
+};
+
+export function parseTurnTrace(raw: unknown): TurnTrace | null {
+  if (raw == null) return null;
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.total_ms !== "number") return null;
+  return value as TurnTrace;
+}
+
+export function turnTraceFromMetadata(metadata: unknown): TurnTrace | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  return parseTurnTrace((metadata as { turnTrace?: unknown }).turnTrace);
+}
 
 export type Handoff = {
   id: string;
   type: string;
   email: string;
+  phone?: string | null;
   name: string;
   company: string;
   pillar: string;

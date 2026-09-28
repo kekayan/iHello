@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -54,9 +54,15 @@ const BRAND_MARK = (
 );
 
 export function Shell({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // SPA shell is prerendered at mask path `/` — keep chrome route-neutral
+  // while generating that shell so deep-link fallback HTML stays generic.
+  const isShell = router.isShell();
+  const activePath = isShell ? null : pathname;
   const activeLabel =
-    NAV.find((item) => item.match(pathname))?.label ?? "Home";
+    (activePath && NAV.find((item) => item.match(activePath))?.label) ||
+    "Admin";
 
   return (
     <div className="grid min-h-svh md:grid-cols-[248px_minmax(0,1fr)]">
@@ -82,7 +88,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </p>
         <nav aria-label="Admin" className="grid gap-0.5">
           {NAV.map((item) => {
-            const active = item.match(pathname);
+            const active = activePath ? item.match(activePath) : false;
             return (
               <Link
                 key={item.to}
@@ -140,7 +146,7 @@ export function Shell({ children }: { children: ReactNode }) {
             Live
           </span>
         </header>
-        <section className="page-enter mx-auto max-w-[1080px] px-5 pb-24 pt-10 md:px-10 md:pt-14">
+        <section className="page-enter mx-auto max-w-[1280px] px-5 pb-24 pt-10 md:px-10 md:pt-14">
           {children}
         </section>
       </div>

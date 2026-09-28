@@ -2,17 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>iHello demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; }
-    code { background: #f2f1ec; padding: 2px 6px; border-radius: 4px; }
+    :root {
+      --ink: #0c1418;
+      --wash: #eef1f4;
+      --paper: #ffffff;
+      --accent: #c41230;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Outfit", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 480px at 12% -10%, rgba(196, 18, 48, 0.12), transparent 55%),
+        radial-gradient(700px 420px at 90% 10%, rgba(12, 20, 24, 0.08), transparent 50%),
+        linear-gradient(180deg, #f7f8fa 0%, var(--wash) 100%);
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 64px 24px 120px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2.4rem, 5vw, 3.4rem);
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+    }
+    p { margin: 0 0 14px; color: #3d4a52; line-height: 1.55; font-size: 1.05rem; }
+    code {
+      background: var(--paper);
+      border: 1px solid rgba(12,20,24,.1);
+      padding: 2px 7px;
+      border-radius: 8px;
+      font-size: .92em;
+    }
+    a { color: var(--accent); font-weight: 500; }
   </style>
 </head>
 <body>
-  <h1>iHello</h1>
-  <p>Demo page for the site chat widget. Open the launcher at the bottom-right.</p>
-  <p>Embed with <code>&lt;script src="/embed.js" async&gt;&lt;/script&gt;</code></p>
-  <p><a href="/admin/">Open admin</a></p>
+  <main>
+    <h1>iHello</h1>
+    <p>Demo page for the site chat widget. Use the crimson launcher at the bottom-right.</p>
+    <p>Embed with <code>&lt;script src="/embed.js" async&gt;&lt;/script&gt;</code></p>
+    <p><a href="/admin/">Open admin</a></p>
+  </main>
   <script src="/embed.js" async></script>
 </body>
 </html>

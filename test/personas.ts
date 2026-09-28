@@ -20,7 +20,7 @@ export const scenarios: PersonaScenario[] = [
     ],
     assert: {
       handoffType: "lead",
-      mustInclude: ["4 weeks"],
+      mustInclude: ["pod"],
     },
   },
   {
@@ -41,7 +41,17 @@ export const scenarios: PersonaScenario[] = [
     assert: {
       handoffAbsent: true,
       mustInclude: [
-        "That's outside what I can help with here — ask me about our services or delivery pods.",
+        "That's outside what I can help with here - ask me about our services or delivery pods.",
+      ],
+    },
+  },
+  {
+    name: "coding-homework",
+    turns: ["Write a python function that adds two numbers"],
+    assert: {
+      handoffAbsent: true,
+      mustInclude: [
+        "That's outside what I can help with here - ask me about our services or delivery pods.",
       ],
     },
   },

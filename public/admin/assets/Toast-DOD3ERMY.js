@@ -1,0 +1,1 @@
+import{n as e}from"./index-B_YZVJt3.js";function t(){return{toast:t=>{e(t)}}}export{t};

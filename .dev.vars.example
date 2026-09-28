@@ -1,4 +1,4 @@
-ANTHROPIC_API_KEY=
+# Optional — Knowledge admin REST only (chat uses env.AI binding, no key)
+CF_API_TOKEN=
 TURNSTILE_SECRET=
 SLACK_WEBHOOK_URL=
-CF_API_TOKEN=

@@ -1,4 +1,5 @@
 import { writeFeedbackEvent } from "./analytics";
+import { requireAccess } from "./access";
 import {
   deleteAction,
   deleteMcpServer,
@@ -16,15 +17,22 @@ import {
   type ActionKind,
 } from "./actions";
 import { onboardAnalyze } from "./pipeline";
+import {
+  hitsToContext,
+  rebuildAllFromDocs,
+  searchVectorize,
+} from "./vectorize-rag";
 import { MODEL_CATALOG, resolveModelId } from "./models";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
+  parseReasoningEffort,
   proceduresForPreset,
   saveSettings,
   type Settings,
 } from "./settings";
 import { handleKnowledge } from "./knowledge-api";
+import { purgeObjects } from "./purge-objects";
 
 const HANDOFF_STATUSES = new Set(["new", "contacted", "scheduled", "closed"]);
 
@@ -33,15 +41,6 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
-}
-
-function requireAccess(request: Request, env: Env): Response | null {
-  // Local/dev placeholder accounts skip Access so /admin works under wrangler dev.
-  if (env.CF_ACCOUNT_ID === "REPLACE") return null;
-  if (!request.headers.get("Cf-Access-Jwt-Assertion")) {
-    return json({ error: "unauthorised" }, 401);
-  }
-  return null;
 }
 
 function deepMergeSettings(base: Settings, patch: Record<string, unknown>): Settings {
@@ -76,7 +75,7 @@ export async function handleAdminApi(
 
   // Public feedback is handled in server.ts
 
-  const unauth = requireAccess(request, env);
+  const unauth = await requireAccess(request, env);
   if (unauth) return unauth;
 
   if (path === "/api/models" && method === "GET") {
@@ -104,12 +103,20 @@ export async function handleAdminApi(
     const { preset: _preset, ...patch } = body;
     void _preset;
     let next = deepMergeSettings(current, patch);
+    if (body.resetBehaviour === true) {
+      next = {
+        ...next,
+        greeting: DEFAULT_SETTINGS.greeting,
+        suggestions: [...DEFAULT_SETTINGS.suggestions],
+        procedures: structuredClone(DEFAULT_SETTINGS.procedures),
+        variants: {},
+      };
+    }
     if (typeof presetRaw === "string") {
-      const preset = presetRaw as "Lead-gen" | "Support" | "Sales";
-      if (preset === "Lead-gen" || preset === "Support" || preset === "Sales") {
+      if (presetRaw === "Lead-gen" || presetRaw === "Support") {
         next = {
           ...next,
-          procedures: proceduresForPreset(preset),
+          procedures: proceduresForPreset(presetRaw),
         };
       }
     }
@@ -122,8 +129,12 @@ export async function handleAdminApi(
         : DEFAULT_SETTINGS.suggestions,
       placeholder: String(next.placeholder ?? DEFAULT_SETTINGS.placeholder),
       variants: next.variants ?? {},
-      procedures: next.procedures ?? DEFAULT_SETTINGS.procedures,
+      procedures: {
+        ...DEFAULT_SETTINGS.procedures,
+        ...(next.procedures ?? {}),
+      },
       modelMain: modelRaw ? resolveModelId(modelRaw, modelRaw) : "",
+      reasoningEffort: parseReasoningEffort(next.reasoningEffort),
       retentionDays: Number(next.retentionDays) || DEFAULT_SETTINGS.retentionDays,
       maxMessages: Number(next.maxMessages) || DEFAULT_SETTINGS.maxMessages,
       maxCharsPerMessage:
@@ -186,16 +197,53 @@ export async function handleAdminApi(
     return json({ conversations: rows.results ?? [] });
   }
 
+  if (path === "/api/traces" && method === "GET") {
+    const rows = await env.DB.prepare(
+      `SELECT m.id, m.conversation_id, m.content, m.created_at, m.grounded_score, m.grounded_commit,
+              m.trace_json, c.page_url
+       FROM messages m
+       LEFT JOIN conversations c ON c.id = m.conversation_id
+       WHERE m.role = 'assistant'
+         AND m.trace_json IS NOT NULL
+         AND m.conversation_id NOT LIKE 'preview_%'
+       ORDER BY m.created_at DESC
+       LIMIT 80`,
+    ).all();
+    return json({ traces: rows.results ?? [] });
+  }
+
   const convMatch = path.match(/^\/api\/conversations\/([^/]+)$/);
   if (convMatch && method === "GET") {
     const id = decodeURIComponent(convMatch[1]!);
     const messages = await env.DB.prepare(
-      `SELECT id, role, content, created_at, retrieval_score, grounded_score, grounded_commit
+      `SELECT id, role, content, created_at, retrieval_score, grounded_score, grounded_commit, trace_json
        FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`,
     )
       .bind(id)
       .all();
     return json({ id, messages: messages.results ?? [] });
+  }
+
+  if (convMatch && method === "DELETE") {
+    const id = decodeURIComponent(convMatch[1]!);
+    const existing = await env.DB.prepare(
+      `SELECT id FROM conversations WHERE id = ?`,
+    )
+      .bind(id)
+      .first<{ id: string }>();
+    if (!existing) {
+      return json({ error: "Conversation not found" }, 404);
+    }
+    await env.DB.prepare(`DELETE FROM messages WHERE conversation_id = ?`)
+      .bind(id)
+      .run();
+    await env.DB.prepare(`DELETE FROM handoffs WHERE conversation_id = ?`)
+      .bind(id)
+      .run();
+    await env.DB.prepare(`DELETE FROM conversations WHERE id = ?`)
+      .bind(id)
+      .run();
+    return json({ ok: true, id });
   }
 
   if (path === "/api/handoffs" && method === "GET") {
@@ -214,6 +262,7 @@ export async function handleAdminApi(
       id: string;
       type: string;
       email: string;
+      phone: string | null;
       name: string;
       company: string;
       pillar: string;
@@ -226,12 +275,13 @@ export async function handleAdminApi(
       conversation_id: string;
     }>();
     const header =
-      "id,type,email,name,company,pillar,timeline,scale,summary,page_url,status,created_at,conversation_id";
+      "id,type,email,phone,name,company,pillar,timeline,scale,summary,page_url,status,created_at,conversation_id";
     const lines = (rows.results ?? []).map((r) =>
       [
         r.id,
         r.type,
         r.email,
+        r.phone ?? "",
         r.name,
         r.company,
         r.pillar,
@@ -277,9 +327,46 @@ export async function handleAdminApi(
     return json({ gaps: rows.results ?? [] });
   }
 
+  if (path === "/api/maintenance/purge-objects" && method === "POST") {
+    if (!env.CF_API_TOKEN) {
+      return json(
+        {
+          error:
+            "CF_API_TOKEN secret is required — enumerating Durable Objects goes through the REST API.",
+        },
+        400,
+      );
+    }
+    const body = (await request.json().catch(() => ({}))) as {
+      cursor?: string;
+      limit?: number;
+      dryRun?: boolean;
+    };
+    try {
+      return json(
+        await purgeObjects(env, {
+          cursor: body.cursor,
+          limit: body.limit,
+          dryRun: body.dryRun === true,
+        }),
+      );
+    } catch (err) {
+      return json({ error: String(err instanceof Error ? err.message : err) }, 502);
+    }
+  }
+
   if (path === "/api/onboard/analyze" && method === "POST") {
     const draft = await onboardAnalyze({ env, defaults: DEFAULT_SETTINGS });
     return json({ draft });
+  }
+
+  if (path === "/api/knowledge/vectorize-sync" && method === "POST") {
+    try {
+      const result = await rebuildAllFromDocs(env);
+      return json({ ok: true, ...result });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
   }
 
   if (path.startsWith("/api/knowledge")) {
@@ -435,6 +522,49 @@ export async function handleAdminApi(
     if (!sub && method === "DELETE") {
       await deleteMcpServer(env.DB, id);
       return json({ ok: true });
+    }
+  }
+
+  if (path === "/api/bench/retrieve" && method === "POST") {
+    try {
+      const body = (await request.json()) as { query?: string; topK?: number };
+      const query = String(body.query || "").trim();
+      if (!query) return json({ error: "query required" }, 400);
+      const topK = Number(body.topK) || 3;
+
+      const vzAt = Date.now();
+      let vectorize: unknown;
+      let vectorize_ms = 0;
+      let vz_err: string | null = null;
+      try {
+        const vz = await searchVectorize({ env, query, topK });
+        vectorize_ms = Date.now() - vzAt;
+        const ctx = hitsToContext(vz.hits);
+        vectorize = {
+          embed_ms: vz.embed_ms,
+          query_ms: vz.query_ms,
+          chunk_count: vz.hits.length,
+          top_score: ctx.topScore || null,
+          preview: vz.hits.slice(0, 2).map((h) => ({
+            score: h.score,
+            key: h.source_key,
+            text: h.text.slice(0, 160),
+          })),
+        };
+      } catch (e) {
+        vectorize_ms = Date.now() - vzAt;
+        vz_err = e instanceof Error ? e.message : String(e);
+      }
+
+      return json({
+        query,
+        vectorize_ms,
+        winner: vz_err ? "neither" : "vectorize",
+        vectorize,
+        vz_err,
+      });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
     }
   }
 
